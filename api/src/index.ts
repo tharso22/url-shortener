@@ -14,25 +14,35 @@ app.use(express.json());
 
 // Route to shorten a URL
 app.post('/api/shorten', async (req, res) => {
-  const { targetUrl } = req.body;
+  const { targetUrl, expiresAt } = req.body;
 
   if (!targetUrl || !targetUrl.startsWith('http')) {
     return res.status(400).json({ error: 'Invalid URL' });
   }
 
   try {
-    // Check if the URL already exists
     const existing = await prisma.url.findFirst({
       where: { targetUrl },
     });
 
     if (existing) {
-      // Increment clicks when reusing an existing record
+      const isDifferentExpiration =
+          (expiresAt && !existing.expiresAt) ||
+          (!expiresAt && existing.expiresAt) ||
+          (expiresAt && existing.expiresAt && new Date(expiresAt).getTime() !== new Date(existing.expiresAt).getTime());
+
+      if (isDifferentExpiration) {
+        await prisma.url.update({
+          where: { slug: existing.slug },
+          data: {
+            expiresAt: expiresAt ? new Date(expiresAt) : null,
+          },
+        });
+      }
+
       await prisma.url.update({
         where: { slug: existing.slug },
-        data: {
-          clicks: { increment: 1 },
-        },
+        data: { clicks: { increment: 1 } },
       });
 
       return res.json({
@@ -43,7 +53,11 @@ app.post('/api/shorten', async (req, res) => {
     const slug = nanoid(6);
 
     const created = await prisma.url.create({
-      data: { slug, targetUrl },
+      data: {
+        slug,
+        targetUrl,
+        expiresAt: expiresAt ? new Date(expiresAt) : undefined,
+      },
     });
 
     res.json({
@@ -61,7 +75,17 @@ app.get('/:slug', async (req, res) => {
   const { slug } = req.params;
 
   try {
-    const record = await prisma.url.update({
+    const record = await prisma.url.findUnique({ where: { slug } });
+
+    if (!record) {
+      return res.status(404).send('Short URL not found');
+    }
+
+    if (record.expiresAt && new Date() > record.expiresAt) {
+      return res.status(410).send('This link has expired');
+    }
+
+    await prisma.url.update({
       where: { slug },
       data: { clicks: { increment: 1 } },
     });
@@ -69,7 +93,7 @@ app.get('/:slug', async (req, res) => {
     res.redirect(301, record.targetUrl);
   } catch (error) {
     console.error(error);
-    res.status(404).send('Short URL not found');
+    res.status(500).send('Server error');
   }
 });
 

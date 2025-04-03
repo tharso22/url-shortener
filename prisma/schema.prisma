@@ -19,4 +19,5 @@ model Url {
   targetUrl String
   createdAt DateTime @default(now())
   clicks    Int      @default(0)
+  expiresAt DateTime?
 }
