@@ -27,6 +27,14 @@ app.post('/api/shorten', async (req, res) => {
     });
 
     if (existing) {
+      // Increment clicks when reusing an existing record
+      await prisma.url.update({
+        where: { slug: existing.slug },
+        data: {
+          clicks: { increment: 1 },
+        },
+      });
+
       return res.json({
         shortUrl: `http://localhost:${process.env.PORT}/${existing.slug}`,
       });
@@ -47,23 +55,21 @@ app.post('/api/shorten', async (req, res) => {
   }
 });
 
+
 // Route to handle redirection
 app.get('/:slug', async (req, res) => {
   const { slug } = req.params;
 
   try {
-    const record = await prisma.url.findUnique({
+    const record = await prisma.url.update({
       where: { slug },
+      data: { clicks: { increment: 1 } },
     });
-
-    if (!record) {
-      return res.status(404).send('Short URL not found');
-    }
 
     res.redirect(301, record.targetUrl);
   } catch (error) {
     console.error(error);
-    res.status(500).send('Server error');
+    res.status(404).send('Short URL not found');
   }
 });
 

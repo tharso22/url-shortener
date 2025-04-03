@@ -18,4 +18,5 @@ model Url {
   slug      String   @unique
   targetUrl String
   createdAt DateTime @default(now())
+  clicks    Int      @default(0)
 }
