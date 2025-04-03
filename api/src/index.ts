@@ -20,17 +20,27 @@ app.post('/api/shorten', async (req, res) => {
     return res.status(400).json({ error: 'Invalid URL' });
   }
 
-  const slug = nanoid(6);
-
   try {
-    await prisma.url.create({
-      data: {
-        slug,
-        targetUrl,
-      },
+    // Check if the URL already exists
+    const existing = await prisma.url.findFirst({
+      where: { targetUrl },
     });
 
-    res.json({ shortUrl: `http://localhost:${process.env.PORT}/${slug}` });
+    if (existing) {
+      return res.json({
+        shortUrl: `http://localhost:${process.env.PORT}/${existing.slug}`,
+      });
+    }
+
+    const slug = nanoid(6);
+
+    const created = await prisma.url.create({
+      data: { slug, targetUrl },
+    });
+
+    res.json({
+      shortUrl: `http://localhost:${process.env.PORT}/${created.slug}`,
+    });
   } catch (error) {
     console.error(error);
     res.status(500).json({ error: 'Failed to shorten URL' });
